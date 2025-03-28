@@ -1,0 +1,235 @@
+.game-board {
+  background-color: #076324;
+  border-radius: 1rem;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  width: 100%;
+  height: 600px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  user-select: none;
+  overflow: hidden;
+}
+
+.game-board .flex {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.game-board .loading {
+  color: white;
+  font-size: 1.5rem;
+  text-align: center;
+}
+
+.card-stack {
+  position: absolute;
+  padding: 10px;
+  border-radius: 0.5rem;
+  min-width: 110px;
+  min-height: 150px;
+  perspective: 1000px;
+}
+
+.card-stack.deck {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.card-stack.table {
+  background: rgba(255, 255, 255, 0.1);
+  min-width: 300px;
+  min-height: 200px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.card-stack.hand {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  background: transparent;
+  border: none;
+  min-width: 300px;
+}
+
+.card-stack.valid-drop {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.1);
+  transform: scale(1.02);
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.3);
+}
+
+.card-stack.invalid-drop {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+  transform: scale(0.98);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+}
+
+/* Card being dragged */
+.playing-card.dragging {
+  opacity: 0.6;
+  transform: scale(1.05);
+  cursor: grabbing !important;
+  pointer-events: none;
+}
+
+/* Card positioning */
+.playing-card {
+  position: absolute;
+  width: var(--card-width);
+  height: var(--card-height);
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  cursor: grab;
+  user-select: none;
+  will-change: transform;
+  transform-origin: center center;
+}
+
+.playing-card:active {
+  cursor: grabbing;
+}
+
+/* Stack hover effects */
+.card-stack:not(.disabled):not(.play-area):not(.deck-area):not(.playerHand-area):hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+  transition: all 0.2s ease;
+}
+
+/* Player hand container styling */
+.player-hand-container {
+  position: absolute;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.player-hand-container.current-player {
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+/* Highlight the current player's hand on hover */
+.player-hand-container.current-player:hover {
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+}
+
+/* Loading state */
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 600px;
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 1rem;
+  font-size: 1.25rem;
+  color: white;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+/* Error state */
+.game-board-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #ff4444;
+  text-align: center;
+  padding: 2rem;
+}
+
+.game-board-error h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.game-board-error button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background-color: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.game-board-error button:hover {
+  background-color: #ff6666;
+}
+
+/* Animations */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .game-board {
+    height: 500px;
+  }
+  
+  .card-stack.table {
+    min-width: 200px;
+    min-height: 150px;
+  }
+  
+  .player-hand-container.current-player {
+    width: 90% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .game-board {
+    height: 400px;
+  }
+  
+  .card-stack.table {
+    min-width: 150px;
+    min-height: 120px;
+  }
+  
+  .player-hand-container.current-player {
+    width: 95% !important;
+  }
+}
+
+/* Accessibility focused styles */
+@media (forced-colors: active) {
+  .game-board {
+    border: 2px solid CanvasText;
+  }
+  
+  .card-stack {
+    border: 1px solid CanvasText;
+  }
+  
+  .player-hand-container.current-player {
+    border: 2px solid Highlight;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-board,
+  .player-hand-container,
+  .card-stack {
+    transition: none;
+  }
+}

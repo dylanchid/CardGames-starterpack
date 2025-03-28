@@ -1,0 +1,248 @@
+.card-stack {
+  position: relative;
+  min-width: 100px;
+  min-height: 140px;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+  perspective: 1000px;
+  transform-style: preserve-3d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-stack.deck {
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px dashed rgba(255, 255, 255, 0.5);
+  width: var(--card-width);
+  height: var(--card-height);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  overflow: visible;
+}
+
+.card-stack.deck .playing-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+  cursor: grab;
+}
+
+.card-stack.deck .playing-card:hover {
+  transform: translateY(-5px);
+}
+
+.card-stack.deck .playing-card.dragging {
+  cursor: grabbing;
+  opacity: 0.8;
+  transform: scale(1.05);
+  z-index: 1000 !important;
+}
+
+.card-stack.hand {
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  min-width: 80%;
+  max-width: 800px;
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  overflow: visible;
+}
+
+.card-stack.table {
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  min-width: 200px;
+  min-height: 200px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 0.5rem;
+  padding: 1rem;
+  overflow: visible;
+}
+
+.card-stack.discard {
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+}
+
+/* Only apply hover effects to stacks that are not in play-area, deck-area, or playerHand-area */
+.card-stack:not(.play-area):not(.deck-area):not(.playerHand-area):hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Stack-specific animations */
+.card-stack.deck:not(.deck-area):hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.card-stack.hand:not(.playerHand-area):hover {
+  transform: translateY(-5px);
+}
+
+/* Drop target states */
+.card-stack.valid-drop {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #22c55e;
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+}
+
+.card-stack.invalid-drop {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  animation: shake 0.5s ease-in-out;
+}
+
+/* Card stacking */
+.card-stack .playing-card {
+  position: absolute;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+  transform-origin: center center;
+  backface-visibility: hidden;
+}
+
+.card-stack.hand .playing-card {
+  position: relative;
+  margin-right: -1rem;
+}
+
+.card-stack.hand .playing-card:last-child {
+  margin-right: 0;
+}
+
+.card-stack.table .playing-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+}
+
+/* Card wrapper animations */
+.card-wrapper {
+  transition: transform 0.3s ease;
+}
+
+.card-wrapper:hover {
+  transform: translateY(-5px);
+}
+
+/* Error message */
+.drop-error {
+  position: absolute;
+  bottom: -2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+/* Animations */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .card-stack {
+    min-width: 80px;
+    min-height: 112px;
+  }
+
+  .card-stack.hand {
+    min-width: 90%;
+  }
+
+  .card-stack.table {
+    min-width: 150px;
+    min-height: 150px;
+  }
+
+  .drop-error {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .card-stack {
+    min-width: 60px;
+    min-height: 84px;
+  }
+
+  .card-stack.hand {
+    min-width: 95%;
+  }
+
+  .card-stack.table {
+    min-width: 120px;
+    min-height: 120px;
+  }
+}
+
+/* High contrast mode support */
+@media (forced-colors: active) {
+  .card-stack {
+    border: 2px solid CanvasText;
+  }
+
+  .card-stack.valid-drop {
+    border: 2px solid CanvasText;
+  }
+
+  .card-stack.invalid-drop {
+    border: 2px solid CanvasText;
+    opacity: 0.7;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .card-stack,
+  .card-stack .playing-card {
+    transition: none;
+  }
+
+  .card-stack.invalid-drop {
+    animation: none;
+  }
+}

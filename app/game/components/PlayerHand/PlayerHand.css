@@ -1,0 +1,28 @@
+.player-hand {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  min-height: 200px;
+  position: relative;
+  perspective: 1000px;
+}
+
+.player-hand .card {
+  transition: transform 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+.player-hand .card:hover {
+  transform: translateY(-10px);
+}
+
+.player-hand .card.selected {
+  transform: translateY(-20px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.player-hand .card.disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+} 

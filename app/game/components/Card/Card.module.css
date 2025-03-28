@@ -1,0 +1,481 @@
+.cardRoot {
+  --card-width: 100px;
+  --card-height: 140px;
+  --card-border-radius: 0.25rem;
+  --card-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  --card-border-color: #e2e8f0;
+  --card-red-color: #e40000;
+  --card-black-color: #000000;
+  --card-background: #2c5282;
+  --card-back-primary: #1a365d;
+  --card-back-secondary: #2c5282;
+  --card-error-color: #ef4444;
+  --card-error-background: #fee2e2;
+  --card-focus-color: #4299e1;
+  --card-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --card-disabled-opacity: 0.7;
+  --card-joker-color: #e40000;
+  --card-joker-secondary-color: #000000;
+}
+
+.playingCard {
+  position: relative;
+  width: var(--card-width, 100px);
+  height: var(--card-height, 140px);
+  perspective: 1000px;
+  border-radius: 8px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  cursor: pointer;
+  user-select: none;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.playingCard:hover:not(.disabled) {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.playingCard:active:not(.disabled) {
+  transform: translateY(-2px);
+  transition: transform 0.1s ease;
+  cursor: grabbing;
+}
+
+.playingCard.selected {
+  transform: translateY(-10px);
+  box-shadow: 0 0 0 2px #4f46e5, 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.playingCard.disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.cardInner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.faceDown .cardInner {
+  transform: rotateY(180deg);
+}
+
+.playingCard.error {
+  background-color: #fee2e2;
+  border: 2px solid #ef4444;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 12px;
+  color: #b91c1c;
+  text-align: center;
+  padding: 10px;
+}
+
+.errorMessage {
+  padding: 8px;
+  background-color: rgba(239, 68, 68, 0.1);
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Color styles */
+.red {
+  --card-color: #dc2626;
+}
+
+.black {
+  --card-color: #171717;
+}
+
+/* Dragging state */
+.dragging {
+  opacity: 0.6 !important;
+  transform: scale(1.05) !important;
+  cursor: grabbing !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  z-index: 9999 !important;
+  pointer-events: none;
+}
+
+/* Animation for drag start */
+@keyframes dragStart {
+  0% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.05);
+  }
+}
+
+.dragging {
+  animation: dragStart 0.2s forwards;
+}
+
+.cardBack {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 2px solid var(--card-back-primary);
+  border-radius: var(--card-border-radius);
+  background-color: var(--card-back-secondary);
+}
+
+.cardBackDefault {
+  background-image:
+    linear-gradient(45deg, var(--card-back-primary) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--card-back-primary) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--card-back-primary) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--card-back-primary) 75%);
+  background-size: 20px 20px;
+}
+
+.cardBackDiagonal {
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      var(--card-back-primary) 0,
+      var(--card-back-primary) 2px,
+      transparent 2px,
+      transparent 8px
+    );
+}
+
+.cardBackGrid {
+  background-image:
+    linear-gradient(var(--card-back-primary) 1px, transparent 1px),
+    linear-gradient(90deg, var(--card-back-primary) 1px, transparent 1px);
+  background-size: 10px 10px;
+}
+
+.cardBackDots {
+  background-image: radial-gradient(
+    var(--card-back-primary) 1px,
+    transparent 1px
+  );
+  background-size: 8px 8px;
+}
+
+.cardFront {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  padding: 0.5rem;
+  backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.cardFront.red {
+  color: var(--card-red-color);
+}
+
+.cardFront.black {
+  color: var(--card-black-color);
+}
+
+.topLeft, .bottomRight {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.25rem;
+  background: white;
+  border-radius: var(--card-border-radius);
+  z-index: 1;
+}
+
+.topLeft {
+  top: 0.25rem;
+  left: 0.25rem;
+}
+
+.bottomRight {
+  bottom: 0.25rem;
+  right: 0.25rem;
+  transform: rotate(180deg);
+}
+
+.centerContent {
+  position: relative;
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.5rem;
+  margin: 2rem 0;
+}
+
+.faceCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: var(--card-border-radius);
+  padding: 0.5rem;
+}
+
+.numberCard {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.numberDisplay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 2rem;
+}
+
+.suitSymbol {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.rankDisplay {
+  font-size: 1.5rem;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.cardSvg {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.cardSvg svg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cardLoading {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  border-radius: var(--card-border-radius);
+}
+
+/* Focus styles for accessibility */
+.playingCard:focus:not(.disabled) {
+  outline: 2px solid var(--card-focus-color);
+  outline-offset: 2px;
+}
+
+.playingCard:focus:not(:focus-visible) {
+  outline: none;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .cardRoot {
+    --card-width: 80px;
+    --card-height: 112px;
+  }
+
+  .playingCard:hover:not(.disabled),
+  .selected:not(.disabled) {
+    transform: translateY(-5px);
+  }
+
+  .patternSymbol {
+    font-size: 1rem;
+  }
+
+  .patternEmpty {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .faceSymbol {
+    font-size: 2.5rem;
+  }
+
+  .faceSuitSymbol {
+    font-size: 1.5rem;
+  }
+
+  .topLeft, .bottomRight {
+    padding: 0.125rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .cardRoot {
+    --card-width: 60px;
+    --card-height: 84px;
+  }
+
+  .patternSymbol {
+    font-size: 0.875rem;
+  }
+
+  .patternEmpty {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .faceSymbol {
+    font-size: 2rem;
+  }
+
+  .faceSuitSymbol {
+    font-size: 1.25rem;
+  }
+}
+
+/* High contrast mode support */
+@media (forced-colors: active) {
+  .playingCard {
+    border: 2px solid CanvasText;
+  }
+
+  .red,
+  .black {
+    color: CanvasText;
+  }
+
+  .cardBack {
+    background: CanvasText;
+  }
+
+  .disabled {
+    opacity: 0.5;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .playingCard,
+  .cardInner {
+    transition: none;
+  }
+
+  .playingCard:hover:not(.disabled),
+  .selected:not(.disabled),
+  .playingCard[draggable='true']:active:not(.disabled) {
+    transform: none;
+  }
+}
+
+.numberPattern {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  padding: 0.5rem;
+}
+
+.patternRow {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.patternSymbol {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.patternEmpty {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.faceSymbol {
+  font-size: 3rem;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.faceSuitSymbol {
+  font-size: 2rem;
+}
+
+/* Joker card styling */
+.jokerContent {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 240, 240, 0.8) 100%);
+  position: relative;
+}
+
+.jokerCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+}
+
+.jokerSymbol {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+  color: var(--card-joker-color);
+}
+
+.jokerText {
+  font-size: 1rem;
+  font-weight: bold;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--card-joker-secondary-color);
+}
+
+@media (max-width: 768px) {
+  .jokerSymbol {
+    font-size: 2.5rem;
+  }
+  
+  .jokerText {
+    font-size: 0.875rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .jokerSymbol {
+    font-size: 2rem;
+  }
+  
+  .jokerText {
+    font-size: 0.75rem;
+  }
+} 
