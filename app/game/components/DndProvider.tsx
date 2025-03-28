@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { DndProvider as ReactDndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { TouchBackend } from 'react-dnd-touch-backend';
@@ -9,20 +9,34 @@ interface DndProviderProps {
 }
 
 export const DndProvider: React.FC<DndProviderProps> = ({ children }) => {
-  // Check if touch is available - simple detection
+  // Use a state to track if we're on client side
+  const [isMounted, setIsMounted] = useState(false);
+  
+  // Check if we're on client-side
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Only check for touch capability on client-side
   const isTouchDevice = () => {
-    return (('ontouchstart' in window) ||
+    if (typeof window === 'undefined') return false;
+    
+    return (
+      ('ontouchstart' in window) ||
       (navigator.maxTouchPoints > 0) ||
       // @ts-ignore
-      (navigator.msMaxTouchPoints > 0));
+      (navigator.msMaxTouchPoints > 0)
+    );
   };
 
-  // Select appropriate backend based on device type
-  const backend = isTouchDevice() ? TouchBackend : HTML5Backend;
-  const options = isTouchDevice() ? { enableMouseEvents: true } : {};
-
+  // Only detect touch after component is mounted (client-side)
+  const isTouch = isMounted && isTouchDevice();
+  
   return (
-    <ReactDndProvider backend={backend} options={options}>
+    <ReactDndProvider 
+      backend={isTouch ? TouchBackend : HTML5Backend}
+      options={isTouch ? { enableMouseEvents: true } : {}}
+    >
       {children}
     </ReactDndProvider>
   );

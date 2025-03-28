@@ -44,11 +44,16 @@ const GameBoardSchema = z.object({
   onCardPlay: z.function().args(CardSchema).returns(z.void()),
 });
 
-type GameBoardProps = z.infer<typeof GameBoardSchema> & {
+type GameBoardProps = Partial<z.infer<typeof GameBoardSchema>> & {
   className?: string;
 };
 
-export const GameBoard: React.FC<GameBoardProps> = ({ className }) => {
+export const GameBoard: React.FC<GameBoardProps> = ({ 
+  className,
+  players = [],
+  currentTrick = [],
+  onCardPlay = () => {}
+}) => {
   const { 
     currentGame, 
     gameState, 
