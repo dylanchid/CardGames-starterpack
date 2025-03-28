@@ -1,5 +1,6 @@
 import { useDispatch, useSelector } from 'react-redux';
 import { useMemo } from 'react';
+import { createSelector } from '@reduxjs/toolkit';
 import type { RootState, AppDispatch } from '../store/store';
 
 // Import actions from our modular slices
@@ -35,19 +36,34 @@ import { TrickHistory } from '../types/core/GameTypes';
 import { Player } from '../types/core/PlayerTypes';
 import { CardType } from '../types/card';
 
-// Memoized selectors
+// Memoized selectors using createSelector
 const selectGamePhase = (state: RootState) => state.game.gamePhase;
-const selectDeck = (state: RootState) => state.cardPlay.deckIds.map(id => state.cardPlay.cardsInPlay[id]);
-const selectTurnupCard = (state: RootState) => state.game.turnupCardId ? state.cardPlay.cardsInPlay[state.game.turnupCardId] : null;
-const selectPlayers = (state: RootState) => state.player.ids.map(id => state.player.entities[id]);
-const selectCurrentTrick = (state: RootState) => {
-  // Convert playerCardMap to array of cards
-  const trickMap = state.cardPlay.currentTrick.playerCardMap;
-  return Object.values(trickMap)
-    .filter(cardId => cardId !== null)
-    .map(cardId => cardId ? state.cardPlay.cardsInPlay[cardId] : null)
-    .filter(Boolean);
-};
+
+const selectDeck = createSelector(
+  [(state: RootState) => state.cardPlay.deckIds, (state: RootState) => state.cardPlay.cardsInPlay],
+  (deckIds, cardsInPlay) => deckIds.map(id => cardsInPlay[id])
+);
+
+const selectTurnupCard = createSelector(
+  [(state: RootState) => state.game.turnupCardId, (state: RootState) => state.cardPlay.cardsInPlay],
+  (turnupCardId, cardsInPlay) => turnupCardId ? cardsInPlay[turnupCardId] : null
+);
+
+const selectPlayers = createSelector(
+  [(state: RootState) => state.player.ids, (state: RootState) => state.player.entities],
+  (ids, entities) => ids.map(id => entities[id])
+);
+
+const selectCurrentTrick = createSelector(
+  [(state: RootState) => state.cardPlay.currentTrick.playerCardMap, (state: RootState) => state.cardPlay.cardsInPlay],
+  (trickMap, cardsInPlay) => {
+    return Object.values(trickMap)
+      .filter(cardId => cardId !== null)
+      .map(cardId => cardId ? cardsInPlay[cardId] : null)
+      .filter(Boolean);
+  }
+);
+
 const selectCurrentTrickLeader = (state: RootState) => state.game.currentTrickLeader;
 const selectError = (state: RootState) => state.game.error;
 const selectIsLoading = (state: RootState) => state.game.isLoading;

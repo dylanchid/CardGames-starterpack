@@ -3,6 +3,7 @@
  */
 
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
+import { createSelector } from '@reduxjs/toolkit';
 import type { RootState, AppDispatch } from './store';
 import { CardType, StackType } from '../types/card';
 import { useCallback } from 'react';
@@ -23,6 +24,31 @@ import type { Player } from '../types/core/PlayerTypes';
 // Use throughout your app instead of plain `useDispatch` and `useSelector`
 export const useAppDispatch = () => useDispatch<AppDispatch>();
 export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
+
+// Memoized selectors
+const selectPlayers = createSelector(
+  [(state: RootState) => state.player.ids, (state: RootState) => state.player.entities],
+  (ids, entities) => ids.map(id => entities[id])
+);
+
+const selectCurrentTrick = createSelector(
+  [(state: RootState) => state.cardPlay?.currentTrick?.playerCardMap || {}, 
+   (state: RootState) => state.cardPlay?.cardsInPlay || {}],
+  (playerCardMap, cardsInPlay) => {
+    return Object.values(playerCardMap)
+      .filter(Boolean)
+      .map(cardId => cardsInPlay[cardId as string])
+      .filter(Boolean);
+  }
+);
+
+const selectDeck = createSelector(
+  [(state: RootState) => state.cardPlay?.deckIds || [], 
+   (state: RootState) => state.cardPlay?.cardsInPlay || {}],
+  (deckIds, cardsInPlay) => {
+    return deckIds.map(id => cardsInPlay[id]).filter(Boolean);
+  }
+);
 
 /**
  * Hook for accessing game state

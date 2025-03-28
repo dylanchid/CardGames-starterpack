@@ -44,16 +44,20 @@ const GameContext = createContext<GameContextType | null>(null);
 export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const game = useGame();
 
+  // Map the game state from useGame() to the format expected by the GameContext
   const value = {
     currentGame: {
-      playerIds: game.playerIds,
+      playerIds: game.players.map(p => p.id),
       entities: {
-        players: game.entities.players,
-        cards: game.entities.cards,
+        players: game.players.reduce((acc, player) => {
+          acc[player.id] = player;
+          return acc;
+        }, {} as Record<string, any>),
+        cards: {},  // This needs to be populated based on your game structure
       },
       currentTrick: game.currentTrick.map(card => ({
-        suit: card.suit,
-        rank: card.rank,
+        suit: card ? card.suit : '',
+        rank: card ? card.rank : '',
         player: game.currentTrickLeader,
       })),
       ui: {
@@ -62,31 +66,48 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           default: {
             tableColor: '#076324',
           },
-        },
-        cardArrangement: 'fan',
+        },        cardArrangement: 'fan' as const,
       },
       onCardPlay: (card: CardType) => {
-        // Implementation of onCardPlay
+        // Implementation of onCardPlay using game.playCard
+        if (game.canPlayCard && card) {
+          game.playCard(game.currentPlayer?.id || '', card);
+        }
       },
     },
     gameState: {
-      deckIds: game.deckIds,
-      currentTrickCardIds: game.currentTrickCardIds,
-      entities: game.entities,
-      playerIds: game.playerIds,
+      deckIds: game.deck.map(card => card.id),
+      currentTrickCardIds: game.currentTrick.map(card => card ? card.id : null),
+      entities: {
+        cards: game.deck.reduce((acc, card) => {
+          acc[card.id] = card;
+          return acc;
+        }, {} as Record<string, any>),
+        players: game.players.reduce((acc, player) => {
+          acc[player.id] = player;
+          return acc;
+        }, {} as Record<string, any>),
+      },
+      playerIds: game.players.map(p => p.id),
     },
     isLoading: game.isLoading,
     performAction: (action: string, playerId: string, data: any) => {
       switch (action) {
         case 'PLAY_CARD':
-          game.playCard(data.cardId, data.playerId);
+          if (data.cardId && data.playerId) {
+            const card = game.deck.find(c => c.id === data.cardId);
+            if (card) {
+              game.playCard(data.playerId, card);
+            }
+          }
           break;
         // Add other actions as needed
       }
     },
     getAvailableActions: (playerId: string) => {
       const actions = [];
-      if (game.currentPlayerIndex === game.playerIds.indexOf(playerId)) {
+      const playerIndex = game.players.findIndex(p => p.id === playerId);
+      if (game.currentPlayerIndex === playerIndex) {
         actions.push('PLAY_CARD');
       }
       return actions;

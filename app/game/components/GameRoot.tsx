@@ -13,6 +13,7 @@ import { CardPlayProvider } from './features/cardPlay/CardPlayProvider';
 import RealtimeProvider from './realtime/RealtimeProvider';
 import ErrorBoundary from './ErrorBoundary';
 import DndProvider from './DndProvider';
+import { GameProvider as GameBoardProvider } from './GameBoard/GameProvider';
 
 /**
  * Props for GameRoot
@@ -35,13 +36,15 @@ export default function GameRoot({ children, sessionId, userId }: GameRootProps)
           <GameProvider>
             <BiddingProvider>
               <CardPlayProvider>
-                {sessionId && userId ? (
-                  <RealtimeProvider sessionId={sessionId} userId={userId}>
-                    {children}
-                  </RealtimeProvider>
-                ) : (
-                  children
-                )}
+                <GameBoardProvider>
+                  {sessionId && userId ? (
+                    <RealtimeProvider sessionId={sessionId} userId={userId}>
+                      {children}
+                    </RealtimeProvider>
+                  ) : (
+                    children
+                  )}
+                </GameBoardProvider>
               </CardPlayProvider>
             </BiddingProvider>
           </GameProvider>
