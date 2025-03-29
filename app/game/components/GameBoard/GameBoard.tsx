@@ -1,18 +1,34 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useGameContext } from './GameProvider';
-import { StackType, Position, CardType } from '../../types/card';
+import { useGame } from '../core/GameProvider';
+import { useGameBoard } from './GameBoardContext';
+import { CardType, Suit, Rank, Position, StackType } from '../../types/card';
 import { Card } from '../Card/Card';
 import { PlayerHand } from '../PlayerHand/PlayerHand';
 import { Stack } from '../Stack/Stack';
 import { DragLayer } from '../DragLayer/DragLayer';
 import { useDndCards } from '../../hooks/useDndCards';
 import { DroppedCardResult, DndCardItem } from '../../types/dnd';
+import { Player } from '../../types/core/PlayerTypes';
+import { adaptPlayerToNinetyNine } from '../../types/core/TypeAdapters';
+import { Player as PlayerComponent } from '../Player/Player';
 import './GameBoard.css';
 import { motion } from 'framer-motion';
 import { z } from 'zod';
-import { Player } from '../Player/Player';
+import { Trick } from '../../types/core/GameTypes';
+
+// Position type for card positioning
+type CardPosition = Position;
+
+// Card type for Player component
+interface PlayerCardType {
+  id: string;
+  suit: Suit;
+  rank: Rank;
+  position: CardPosition;
+  isFaceUp: boolean;
+}
 
 const CardSchema = z.object({
   id: z.string(),
@@ -28,10 +44,15 @@ const CardSchema = z.object({
 const PlayerSchema = z.object({
   id: z.string(),
   name: z.string(),
-  hand: z.array(CardSchema),
-  bid: z.number().nullable(),
+  handIds: z.array(z.string()),
+  bidCardIds: z.array(z.string()),
   tricksWon: z.number(),
+  score: z.number(),
   isActive: z.boolean(),
+  isAI: z.boolean().optional(),
+  rating: z.number().optional(),
+  aiLevel: z.enum(['easy', 'medium', 'hard']).optional(),
+  isReady: z.boolean(),
 });
 
 const GameBoardSchema = z.object({
@@ -48,178 +69,202 @@ type GameBoardProps = Partial<z.infer<typeof GameBoardSchema>> & {
   className?: string;
 };
 
+// Helper function to transform player data for the Player component
+const transformPlayerData = (player: Player, cards: Record<string, CardType>, onCardPlay: (card: PlayerCardType) => void) => {
+  if (!player) {
+    return {
+      id: '',
+      name: '',
+      hand: [],
+      bid: null,
+      tricksWon: 0,
+      isActive: false,
+      onCardClick: () => {}
+    };
+  }
+
+  const playerHand = player.handIds?.map((id: string) => ({
+    ...cards[id],
+    position: { x: 0, y: 0, zIndex: 1 } as Position,
+    isFaceUp: true
+  })) as PlayerCardType[] || [];
+
+  return {
+    id: player.id,
+    name: player.name,
+    hand: playerHand,
+    bid: player.bidCardIds?.length > 0 ? player.bidCardIds.length : null,
+    tricksWon: player.tricksWon,
+    isActive: player.isActive,
+    onCardClick: (card: { id: string; suit: Suit; rank: Rank; position: Position; isFaceUp?: boolean }) => {
+      onCardPlay({
+        id: card.id,
+        suit: card.suit,
+        rank: card.rank,
+        position: card.position,
+        isFaceUp: card.isFaceUp ?? true
+      });
+    }
+  };
+};
+
+// Update the suit comparison to use the correct Suit enum
+const isRedSuit = (suit: Suit) => suit === Suit.HEARTS || suit === Suit.DIAMONDS;
+
 export const GameBoard: React.FC<GameBoardProps> = ({ 
   className,
   players = [],
-  currentTrick = [],
   onCardPlay = () => {}
 }) => {
-  const { 
-    currentGame, 
-    gameState, 
-    isLoading, 
-    performAction,
-    getAvailableActions
-  } = useGameContext();
+  const { state, actions, queries } = useGame();
+  const { state: boardState, actions: boardActions, queries: boardQueries } = useGameBoard();
   
   const [stacks, setStacks] = useState<StackType[]>([]);
+  const [selectedCard, setSelectedCard] = useState<CardType | null>(null);
+  const [draggedCard, setDraggedCard] = useState<CardType | null>(null);
+
+  const currentTrick = boardQueries.getCurrentTrick();
+  const currentPlayer = boardQueries.getCurrentPlayer();
+  const playerOrder = boardQueries.getPlayerOrder();
   
   // Initialize React DnD hooks
   const { handleCardDrop, isValidCardDrop } = useDndCards();
 
   // Initialize stacks based on game state
   useEffect(() => {
-    if (!gameState || !currentGame) return;
+    if (!state) return;
 
     // Convert game state to stacks
     const gameStacks: StackType[] = [];
     
     // Add deck stack if it exists in game state
-    if (gameState.deckIds && gameState.deckIds.length > 0) {
-      const deckCards = gameState.deckIds.map((id: string) => gameState.entities.cards[id]);
+    if (state.entities.stacks.deck) {
+      const deckStack = state.entities.stacks.deck;
+      const deckCards = deckStack.cardIds.map(id => state.entities.cards[id]);
       
       gameStacks.push({
         id: 'deck',
         cards: deckCards,
-        position: { x: 50, y: 50, zIndex: 1 },
+        position: { x: 100, y: 100, rotation: 0, zIndex: 1 },
         isFaceUp: false,
         type: 'deck',
         cardCount: deckCards.length
       });
     }
     
-    // Add table stack
-    gameStacks.push({
-      id: 'table',
-      cards: gameState.currentTrickCardIds 
-        ? gameState.currentTrickCardIds
-            .filter((id: string | null) => id !== null)
-            .map((id: string) => gameState.entities.cards[id])
-        : [],
-      position: { x: 200, y: 200, zIndex: 1 },
-      isFaceUp: true,
-      type: 'table',
-      cardCount: gameState.currentTrickCardIds?.filter((id: string | null) => id !== null).length || 0
-    });
+    // Add table stack for current trick
+    if (currentTrick) {
+      const trickCards = currentTrick.cards.map(card => state.entities.cards[card.cardId]);
+      
+      gameStacks.push({
+        id: 'table',
+        cards: trickCards,
+        position: { x: 200, y: 200, rotation: 0, zIndex: 1 },
+        isFaceUp: true,
+        type: 'table',
+        cardCount: trickCards.length
+      });
+    }
     
     // Add player hands
-    if (gameState.entities.players) {
-      gameState.playerIds.forEach((playerId: string, index: number) => {
-        const player = gameState.entities.players[playerId];
-        const handCards = player.handIds.map((id: string) => gameState.entities.cards[id]);
-        
-        // Position hands based on player index and game UI layout
-        const position = getPlayerPosition(index, gameState.playerIds.length, currentGame.ui.layout);
-        
-        gameStacks.push({
-          id: `player-${playerId}`,
-          cards: handCards,
-          position,
-          isFaceUp: true,
-          type: 'hand',
-          cardCount: handCards.length,
-          owner: playerId
-        });
+    if (state.entities.players) {
+      playerOrder.forEach((player: Player, index: number) => {
+        const handStack = state.entities.stacks[`hand-${player.id}`];
+        if (handStack) {
+          const handCards = handStack.cardIds.map(id => state.entities.cards[id]);
+          
+          // Position hands based on player index and game UI layout
+          const position = getPlayerPosition(index, playerOrder.length);
+          
+          gameStacks.push({
+            id: `hand-${player.id}`,
+            cards: handCards,
+            position: {
+              x: position.x,
+              y: position.y,
+              rotation: 0,
+              zIndex: 1
+            },
+            isFaceUp: true,
+            type: 'hand',
+            owner: player.id,
+            cardCount: handCards.length
+          });
+        }
       });
     }
     
     setStacks(gameStacks);
-  }, [gameState, currentGame]);
+  }, [state, currentTrick, playerOrder]);
 
   // Function to get player position based on game layout
-  const getPlayerPosition = (playerIndex: number, totalPlayers: number, layout: string) => {
-    const baseX = 400;
-    const baseY = 400;
-    const radius = 300;
+  const getPlayerPosition = (index: number, totalPlayers: number): Position => {
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    const radius = Math.min(window.innerWidth, window.innerHeight) * 0.4;
     
-    // For circular layout, position players in a circle
-    if (layout === 'circular') {
-      const angle = (playerIndex * 2 * Math.PI / totalPlayers) - Math.PI/2;
-      return {
-        x: baseX + radius * Math.cos(angle),
-        y: baseY + radius * Math.sin(angle),
-        zIndex: 1
-      };
-    }
-    
-    // For rectangular layout, position players on the sides
-    if (layout === 'rectangle') {
-      const positions = [
-        { x: baseX, y: baseY + radius }, // bottom
-        { x: baseX - radius, y: baseY }, // left
-        { x: baseX, y: baseY - radius }, // top
-        { x: baseX + radius, y: baseY }, // right
-      ];
-      
-      // If more than 4 players, adjust positions
-      const posIndex = playerIndex % positions.length;
-      return {
-        ...positions[posIndex],
-        zIndex: 1
-      };
-    }
-    
-    // Default stacked layout
+    const angle = (index * 2 * Math.PI) / totalPlayers;
     return {
-      x: baseX,
-      y: baseY + (playerIndex * 50),
-      zIndex: 1
+      x: centerX + radius * Math.cos(angle),
+      y: centerY + radius * Math.sin(angle),
+      zIndex: 1,
+      rotation: 0
     };
   };
+
+  // Function to ensure position has required properties
+  const ensurePosition = (position: Partial<Position>): Position => ({
+    x: position.x || 0,
+    y: position.y || 0,
+    zIndex: position.zIndex || 1,
+    rotation: position.rotation || 0
+  });
 
   // Handle card click
   const handleCardClick = (card: CardType) => {
     const fromStack = stacks.find(s => s.cards.some(c => c.id === card.id));
     
     if (fromStack && fromStack.type === 'hand') {
-      // Handle card play via click
-      performAction('PLAY_CARD', fromStack.owner || 'player1', {
-        cardId: card.id,
-        playerId: fromStack.owner
-      });
+      // Play card action
+      actions.playCard(card.id);
     }
   };
 
-  // Custom card drop handler using React DnD
+  // Handle card drop
   const onCardDrop = (result: DroppedCardResult) => {
-    // Find the source and target stacks
     const sourceStack = stacks.find(s => s.id === result.sourceStackId);
     const targetStack = stacks.find(s => s.id === result.targetStackId);
     
     if (!sourceStack || !targetStack) return;
     
-    // Check if this is a player hand to table move (playing a card)
     if (sourceStack.type === 'hand' && targetStack.type === 'table') {
       // Find the card being moved
       const card = sourceStack.cards.find(c => c.id === result.cardId);
       if (!card) return;
       
       // Play card action
-      performAction('PLAY_CARD', sourceStack.owner || 'player1', {
-        cardId: card.id,
-        playerId: sourceStack.owner
-      });
+      actions.playCard(card.id);
     }
-    
-    // Call the main handler for any Redux actions
-    handleCardDrop(result);
   };
 
-  // Validate if a drop is valid with game-specific rules
+  // Validate card drop
   const validateCardDrop = useCallback((cardItem: DndCardItem, targetStack: StackType): boolean => {
-    // Implement game-specific validation logic
-    const availableActions = getAvailableActions('player1'); // Replace with current player ID
+    // Only allow card plays if it's the player's turn
+    const sourceStack = stacks.find(s => s.id === cardItem.sourceStackId);
+    if (!sourceStack?.owner) return false;
+    
+    const isPlayerTurn = queries.isPlayerTurn(sourceStack.owner);
     
     // Only allow card plays if it's a valid action
-    if (targetStack.type === 'table' && cardItem.sourceStackId.includes('player-')) {
-      return availableActions.includes('PLAY_CARD');
+    if (targetStack.type === 'table' && cardItem.sourceStackId.includes('hand-')) {
+      return isPlayerTurn;
     }
     
     return false;
-  }, [getAvailableActions]);
+  }, [queries.isPlayerTurn, stacks]);
 
   // Render loading state
-  if (isLoading) {
+  if (!state) {
     return <div className="loading">Loading game board...</div>;
   }
 
@@ -228,7 +273,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     <div 
       className={`game-board ${className || ''}`}
       style={{
-        background: currentGame?.ui.themes?.default.tableColor || '#076324',
+        background: '#076324',
         position: 'relative',
         width: '100%',
         height: '600px',
@@ -238,6 +283,10 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     >
       {/* Render stacks with React DnD */}
       {stacks.map(stack => {
+        const stackWithPosition: StackType = {
+          ...stack,
+          position: ensurePosition(stack.position)
+        };
         // Use PlayerHand component for hand stacks
         if (stack.type === 'hand') {
           const playerId = stack.owner || 'player1';
@@ -247,8 +296,8 @@ export const GameBoard: React.FC<GameBoardProps> = ({
           const position = isCurrentPlayer 
             ? { left: '50%', bottom: '20px', transform: 'translateX(-50%)' }
             : { 
-                left: stack.position.x, 
-                top: stack.position.y, 
+                left: stack.position?.x || 0, 
+                top: stack.position?.y || 0, 
                 transform: 'none'
               };
               
@@ -259,13 +308,13 @@ export const GameBoard: React.FC<GameBoardProps> = ({
               style={{
                 position: 'absolute',
                 ...position,
-                zIndex: stack.position.zIndex,
+                zIndex: 1,
                 width: isCurrentPlayer ? '80%' : '250px'
               }}
             >
               <Stack
                 key={stack.id}
-                stack={stack}
+                stack={stackWithPosition}
                 onCardDrop={onCardDrop}
                 isValidDrop={validateCardDrop}
                 onCardClick={handleCardClick}
@@ -279,17 +328,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({
         return (
           <Stack
             key={stack.id}
-            stack={stack}
+            stack={stackWithPosition}
             onCardDrop={onCardDrop}
             isValidDrop={validateCardDrop}
             onCardClick={handleCardClick}
             className={`${stack.type}-stack`}
-            style={{
-              position: 'absolute',
-              left: stack.position.x,
-              top: stack.position.y,
-              zIndex: stack.position.zIndex
-            }}
           />
         );
       })}
@@ -297,34 +340,47 @@ export const GameBoard: React.FC<GameBoardProps> = ({
       {/* Center area for current trick */}
       <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
         <div className="flex gap-2">
-          {currentGame?.currentTrick.map((card, index) => (
-            <div
-              key={`${card.suit}-${card.rank}-${index}`}
-              className="w-24 h-36 bg-white rounded-lg shadow-lg flex items-center justify-center"
-            >
-              <span className={`text-2xl ${card.suit === '♥' || card.suit === '♦' ? 'text-red-500' : 'text-black'}`}>
-                {card.rank} {card.suit}
-              </span>
-            </div>
-          ))}
+          {currentTrick?.cards.map((card, index) => {
+            const cardData = state.entities.cards[card.cardId];
+            if (!cardData) return null;
+            
+            return (
+              <div
+                key={`${cardData.suit}-${cardData.rank}-${index}`}
+                className="w-24 h-36 bg-white rounded-lg shadow-lg flex items-center justify-center"
+              >
+                <span className={`text-2xl ${isRedSuit(cardData.suit) ? 'text-red-500' : 'text-black'}`}>
+                  {cardData.rank} {cardData.suit}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Player positions */}
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2">
-        <Player {...currentGame?.entities.players[currentGame.playerIds[0]]} onCardClick={currentGame?.onCardPlay} />
+      <div className="absolute top-8 left-1/2 transform -translate-x-1/2">
+        <div className="bg-opacity-95 backdrop-blur-sm p-2 rounded-lg">
+          <PlayerComponent {...transformPlayerData(boardState.players[0], state.entities.cards, onCardPlay)} />
+        </div>
       </div>
       
-      <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-        <Player {...currentGame?.entities.players[currentGame.playerIds[1]]} onCardClick={currentGame?.onCardPlay} />
+      <div className="absolute right-8 top-1/2 transform -translate-y-1/2">
+        <div className="bg-opacity-95 backdrop-blur-sm p-2 rounded-lg">
+          <PlayerComponent {...transformPlayerData(boardState.players[1], state.entities.cards, onCardPlay)} />
+        </div>
       </div>
       
-      <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-        <Player {...currentGame?.entities.players[currentGame.playerIds[2]]} onCardClick={currentGame?.onCardPlay} />
+      <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2">
+        <div className="bg-opacity-95 backdrop-blur-sm p-2 rounded-lg">
+          <PlayerComponent {...transformPlayerData(boardState.players[2], state.entities.cards, onCardPlay)} />
+        </div>
       </div>
       
-      <div className="absolute left-4 top-1/2 transform -translate-y-1/2">
-        <Player {...currentGame?.entities.players[currentGame.playerIds[3]]} onCardClick={currentGame?.onCardPlay} />
+      <div className="absolute left-8 top-1/2 transform -translate-y-1/2">
+        <div className="bg-opacity-95 backdrop-blur-sm p-2 rounded-lg">
+          <PlayerComponent {...transformPlayerData(boardState.players[3], state.entities.cards, onCardPlay)} />
+        </div>
       </div>
       
       {/* Custom drag layer for better UX */}
@@ -332,35 +388,5 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     </div>
   );
 };
-
-// Helper functions for card display
-function getRankDisplay(rank: string): string {
-  const display: Record<string, string> = {
-    'ACE': 'A',
-    'KING': 'K',
-    'QUEEN': 'Q',
-    'JACK': 'J',
-    'TEN': '10',
-    'NINE': '9',
-    'EIGHT': '8',
-    'SEVEN': '7',
-    'SIX': '6',
-    'FIVE': '5',
-    'FOUR': '4',
-    'THREE': '3',
-    'TWO': '2',
-  };
-  return display[rank] || rank;
-}
-
-function getSuitSymbol(suit: string): string {
-  const symbols: Record<string, string> = {
-    'HEARTS': '♥',
-    'DIAMONDS': '♦',
-    'CLUBS': '♣',
-    'SPADES': '♠',
-  };
-  return symbols[suit] || suit;
-}
 
 export default GameBoard;

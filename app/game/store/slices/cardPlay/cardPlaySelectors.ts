@@ -24,7 +24,9 @@ export const selectCardById = (state: RootState, cardId: string) =>
 export const selectCurrentTrickCards = createSelector(
   [selectCurrentTrick, selectCardsInPlay],
   (currentTrick, cardsInPlay) => 
-    currentTrick.cardIds.map(id => id ? cardsInPlay[id] : null)
+    Object.values(currentTrick.playerCardMap)
+      .filter((cardId): cardId is string => cardId !== null)
+      .map(id => cardsInPlay[id])
 );
 
 export const selectDeckCards = createSelector(
@@ -43,8 +45,9 @@ export const selectCurrentTrickLeadSuit = createSelector(
 );
 
 export const selectCurrentTrickWinnerIndex = createSelector(
-  [selectCurrentTrick],
-  currentTrick => currentTrick.winnerIndex
+  [selectCurrentTrick, selectPlayOrder],
+  (currentTrick, playOrder) => 
+    currentTrick.winnerId ? playOrder.indexOf(currentTrick.winnerId) : null
 );
 
 export const selectCurrentTrickWinnerPlayerId = createSelector(

@@ -7,6 +7,7 @@
 import React, { createContext, useContext, ReactNode, useMemo } from 'react';
 import { useAppDispatch, useAppSelector } from '@/app/game/store/store';
 import { playCardAction } from '@/app/game/store/gameThunks';
+import { CardPlayContextValue } from '@/app/game/types/core/ContextTypes';
 import { 
   selectCardPlayState,
   selectCurrentTrick,
@@ -28,32 +29,6 @@ import {
   completeTrick,
   resetCardPlay 
 } from '@/app/game/store/slices/cardPlay/cardPlaySlice';
-
-/**
- * Card play context interface
- */
-interface CardPlayContextValue {
-  // Card play state
-  currentTrick: {
-    cards: (CardType | null)[];
-    leadSuit: string | null;
-    isComplete: boolean;
-    winnerIndex: number | null;
-  };
-  trickNumber: number;
-  currentPlayerIndex: number;
-  currentPlayerId: string | null;
-  
-  // Card play actions
-  playCard: (playerId: string, card: CardType) => Promise<void>;
-  initializeNewTrick: (leadPlayerIndex: number) => void;
-  completeTrick: (winnerIndex: number, winnerId: string, trickNumber: number) => void;
-  resetCardPlay: () => void;
-  
-  // Card play queries
-  getValidCardsToPlay: (playerId: string) => CardType[];
-  getCurrentPlayerValidCards: () => CardType[];
-}
 
 // Create context
 const CardPlayContext = createContext<CardPlayContextValue | undefined>(undefined);

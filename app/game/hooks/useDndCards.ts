@@ -1,8 +1,10 @@
 import { useCallback } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { DroppedCardResult, DndCardItem } from '../types/dnd';
-import { StackType, CardType } from '../types/card';
+import { CardType, validateStack } from '../types/card';
 import { selectGameState } from '../store/slices/game/gameSelectors';
+import { GameState } from '../types/core/GameTypes';
+import { StackType } from '../../types/core/StackTypes';
 
 /**
  * Custom hook for handling card drag and drop with React DnD
@@ -60,13 +62,17 @@ export function useDndCards() {
   const getStackById = useCallback((stackId: string): StackType | undefined => {
     if (!gameState) return undefined;
     
-    // For now, this is a placeholder since we don't have stacks in the core game state yet
-    // This will be replaced with actual implementation when the stacks are added to the state
-    // This is just to prevent TypeScript errors
-    return undefined;
-    
-    // When implemented, it will look something like:
-    // return (gameState as any).stacks?.find((stack: StackType) => stack.id === stackId);
+    // Get stack from game state entities
+    const stack = gameState.entities.stacks?.[stackId];
+    if (!stack) return undefined;
+
+    // Validate stack structure
+    if (!validateStack(stack)) {
+      console.error('Invalid stack structure:', stack);
+      return undefined;
+    }
+
+    return stack;
   }, [gameState]);
 
   return {

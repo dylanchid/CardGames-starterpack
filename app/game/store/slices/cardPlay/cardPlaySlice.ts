@@ -207,6 +207,13 @@ const cardPlaySlice = createSlice({
         cardsInPlay: state.cardsInPlay, // Keep the cards
       };
     },
+    
+    /**
+     * Clear the current trick
+     */
+    clearCurrentTrick: (state) => {
+      state.currentTrick.playerCardMap = {};
+    },
   },
   extraReducers: (builder) => {
     builder.addCase(initializeGame.fulfilled, (state, action) => {
@@ -261,6 +268,7 @@ export const {
   dealCards,
   addCardToPlay,
   resetCardPlay,
+  clearCurrentTrick,
 } = cardPlaySlice.actions;
 
 // Thunks for coordinated actions

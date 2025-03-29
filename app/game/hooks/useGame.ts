@@ -1,7 +1,9 @@
-import { useDispatch, useSelector } from 'react-redux';
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { createSelector } from '@reduxjs/toolkit';
-import type { RootState, AppDispatch } from '../store/store';
+import { useAppDispatch, useAppSelector } from '../store/store';
+import { RootState } from '../store/store';
+import { GameContext } from '../components/core/GameProvider';
+import React from 'react';
 
 // Import actions from our modular slices
 import {
@@ -37,25 +39,25 @@ import { Player } from '../types/core/PlayerTypes';
 import { CardType } from '../types/card';
 
 // Memoized selectors using createSelector
-const selectGamePhase = (state: RootState) => state.game.gamePhase;
+const selectGamePhase = (state: RootState) => state.game.core.phase;
 
 const selectDeck = createSelector(
-  [(state: RootState) => state.cardPlay.deckIds, (state: RootState) => state.cardPlay.cardsInPlay],
+  [(state: RootState) => state.cardPlay?.deckIds ?? [], (state: RootState) => state.cardPlay?.cardsInPlay ?? {}],
   (deckIds, cardsInPlay) => deckIds.map(id => cardsInPlay[id])
 );
 
 const selectTurnupCard = createSelector(
-  [(state: RootState) => state.game.turnupCardId, (state: RootState) => state.cardPlay.cardsInPlay],
-  (turnupCardId, cardsInPlay) => turnupCardId ? cardsInPlay[turnupCardId] : null
+  [(state: RootState) => state.game.entities.cards[state.game.relationships.currentTrick ?? ''], (state: RootState) => state.cardPlay?.cardsInPlay ?? {}],
+  (turnupCard, cardsInPlay) => turnupCard ? cardsInPlay[turnupCard.id] : null
 );
 
 const selectPlayers = createSelector(
-  [(state: RootState) => state.player.ids, (state: RootState) => state.player.entities],
-  (ids, entities) => ids.map(id => entities[id])
+  [(state: RootState) => state.game.relationships.playerOrder, (state: RootState) => state.game.entities.players],
+  (playerOrder, players) => playerOrder.map(id => players[id])
 );
 
 const selectCurrentTrick = createSelector(
-  [(state: RootState) => state.cardPlay.currentTrick.playerCardMap, (state: RootState) => state.cardPlay.cardsInPlay],
+  [(state: RootState) => state.cardPlay?.currentTrick?.playerCardMap ?? {}, (state: RootState) => state.cardPlay?.cardsInPlay ?? {}],
   (trickMap, cardsInPlay) => {
     return Object.values(trickMap)
       .filter(cardId => cardId !== null)
@@ -64,143 +66,27 @@ const selectCurrentTrick = createSelector(
   }
 );
 
-const selectCurrentTrickLeader = (state: RootState) => state.game.currentTrickLeader;
-const selectError = (state: RootState) => state.game.error;
-const selectIsLoading = (state: RootState) => state.game.isLoading;
-const selectLastAction = (state: RootState) => state.game.lastAction;
-const selectGameStarted = (state: RootState) => state.game.gameStarted;
-const selectCurrentPlayerIndex = (state: RootState) => state.game.currentPlayerIndex;
+const selectCurrentTrickLeader = (state: RootState) => state.game.relationships.currentPlayer;
+const selectError = (state: RootState) => state.game.core.error;
+const selectIsLoading = (state: RootState) => state.game.core.phase === 'setup';
+const selectLastAction = (state: RootState) => state.game.core.lastAction;
+const selectGameStarted = (state: RootState) => state.game.core.phase !== 'setup';
+const selectCurrentPlayerIndex = (state: RootState) => 
+  state.game.relationships.playerOrder.indexOf(state.game.relationships.currentPlayer ?? '');
+
 // New selectors
-const selectRoundNumber = (state: RootState) => state.game.roundNumber;
-const selectGameMode = (state: RootState) => state.game.gameMode;
-const selectTrickHistory = (state: RootState) => state.game.trickHistory;
-const selectGameSettings = (state: RootState) => state.game.gameSettings;
+const selectRoundNumber = (state: RootState) => Object.keys(state.game.entities.tricks).length;
+const selectGameMode = (state: RootState) => state.game.core.settings.autoPlay ? 'trump' : 'no-trump';
+const selectTrickHistory = (state: RootState) => ({
+  ids: Object.keys(state.game.entities.tricks),
+  entities: state.game.entities.tricks,
+});
+const selectGameSettings = (state: RootState) => state.game.core.settings;
 
 export const useGame = () => {
-  const dispatch = useDispatch<AppDispatch>();
-
-  // Selectors with memoization
-  const gamePhase = useSelector(selectGamePhase);
-  const deck = useSelector(selectDeck);
-  const turnupCard = useSelector(selectTurnupCard);
-  const players = useSelector(selectPlayers);
-  const currentTrick = useSelector(selectCurrentTrick);
-  const currentTrickLeader = useSelector(selectCurrentTrickLeader);
-  const error = useSelector(selectError);
-  const isLoading = useSelector(selectIsLoading);
-  const lastAction = useSelector(selectLastAction);
-  const gameStarted = useSelector(selectGameStarted);
-  const currentPlayerIndex = useSelector(selectCurrentPlayerIndex);
-  // New state
-  const roundNumber = useSelector(selectRoundNumber);
-  const gameMode = useSelector(selectGameMode);
-  const trickHistory = useSelector(selectTrickHistory);
-  const gameSettings = useSelector(selectGameSettings);
-
-  // Memoized actions
-  const actions = useMemo(
-    () => ({
-      setGamePhase: (phase: GamePhase) => dispatch(setGamePhase(phase)),
-      setDeck: (cards: CardType[]) => dispatch(initializeDeck()),
-      setTurnupCard: (card: CardType | null) => dispatch(setGameTurnupCard(card?.id || null)),
-      setPlayers: (players: Player[]) => dispatch(setPlayers(players)),
-      setCurrentTrickLeader: (leader: number) => dispatch(setCurrentTrickLeader(leader)),
-      setError: (error: GameError | null) => dispatch(setGameError(error)),
-      setLoading: (loading: boolean) => dispatch(setGameLoading(loading)),
-      setLastAction: (action: string | null) => dispatch(setGameLastAction(action)),
-      setGameStarted: (started: boolean) => dispatch(setGameStarted(started)),
-      setCurrentPlayerIndex: (index: number) => dispatch(setCurrentPlayerIndex(index)),
-      dealCards: () => dispatch(dealCards({ numPlayers: players.length, cardsPerPlayer: gameSettings.cardsPerPlayer })),
-      playCard: (playerId: string, card: CardType) => dispatch(playCard({ playerId, card })),
-      placeBid: (playerId: string, bidCards: CardType[]) => dispatch(placeBid({ playerId, bidCards })),
-      revealBid: (playerId: string) => dispatch(revealBid({ playerId })),
-      // New actions
-      setRoundNumber: (round: number) => dispatch(setRoundNumber(round)),
-      setGameMode: (mode: GameMode) => dispatch(setGameMode(mode)),
-      updateGameSettings: (settings: Partial<GameSettings>) => dispatch(updateGameSettings(settings)),
-      addTrickToHistory: (trick: Omit<TrickHistory, 'id' | 'timestamp'>) => dispatch(addTrickToHistory(trick)),
-      clearTrickHistory: () => dispatch(clearTrickHistory()),
-    }),
-    [dispatch, players.length, gameSettings.cardsPerPlayer]
-  );
-
-  // Memoized derived state
-  const currentPlayer = useMemo(
-    () => players[currentPlayerIndex],
-    [players, currentPlayerIndex]
-  );
-
-  const isCurrentPlayerActive = useMemo(
-    () => currentPlayer?.isActive ?? false,
-    [currentPlayer]
-  );
-
-  const canPlayCard = useMemo(
-    () => gamePhase === 'playing' && isCurrentPlayerActive && !isLoading,
-    [gamePhase, isCurrentPlayerActive, isLoading]
-  );
-
-  // New derived state
-  const isRoundComplete = useMemo(
-    () => gameSettings.maxTricks > 0 && trickHistory.ids.length >= gameSettings.maxTricks,
-    [gameSettings.maxTricks, trickHistory.ids.length]
-  );
-
-  const isGameComplete = useMemo(
-    () => gameSettings.maxRounds > 0 && roundNumber > gameSettings.maxRounds,
-    [gameSettings.maxRounds, roundNumber]
-  );
-
-  // Memoized return value
-  return useMemo(
-    () => ({
-      // State
-      gamePhase,
-      deck,
-      turnupCard,
-      players,
-      currentTrick,
-      currentTrickLeader,
-      error,
-      isLoading,
-      lastAction,
-      gameStarted,
-      currentPlayerIndex,
-      currentPlayer,
-      isCurrentPlayerActive,
-      canPlayCard,
-      // New state
-      roundNumber,
-      gameMode,
-      trickHistory,
-      gameSettings,
-      isRoundComplete,
-      isGameComplete,
-      // Actions
-      ...actions,
-    }),
-    [
-      gamePhase,
-      deck,
-      turnupCard,
-      players,
-      currentTrick,
-      currentTrickLeader,
-      error,
-      isLoading,
-      lastAction,
-      gameStarted,
-      currentPlayerIndex,
-      currentPlayer,
-      isCurrentPlayerActive,
-      canPlayCard,
-      roundNumber,
-      gameMode,
-      trickHistory,
-      gameSettings,
-      isRoundComplete,
-      isGameComplete,
-      actions,
-    ]
-  );
+  const context = React.useContext(GameContext);
+  if (!context) {
+    throw new Error('useGame must be used within a GameProvider');
+  }
+  return context;
 }; 

@@ -1,264 +1,277 @@
 /**
- * @fileoverview Realtime manager for WebSocket connections
+ * @fileoverview Real-time synchronization manager
  */
 
-import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
-import { createBrowserClient } from '@supabase/ssr';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { GameState as AppGameState } from '@/app/types/core/GameTypes';
+import { GameState as RealtimeGameState } from '@/app/game/types/core/GameTypes';
+import { GameSync } from '@/app/lib/realtime/GameSync';
+import { ConflictResolver } from '@/app/lib/realtime/ConflictResolver';
+import { StateManager } from '@/app/lib/realtime/StateManager';
+import { ConnectionManager } from '@/app/lib/realtime/ConnectionManager';
+import { GameStateAdapter } from '@/app/game/adapters/GameStateAdapter';
 
-/**
- * Event types
- */
-export type GameEvent = 
-  | 'game_update'
-  | 'player_join'
-  | 'player_leave'
-  | 'card_play'
-  | 'bid_made'
-  | 'trick_complete'
-  | 'round_complete'
-  | 'game_complete'
-  | 'chat_message'
-  | 'state_sync';
+export type StateChangeHandler = (state: RealtimeGameState) => void;
+export type ErrorHandler = (error: Error) => void;
+export type ConnectionHandler = () => void;
 
-/**
- * Game message type
- */
-export interface GameMessage {
-  eventType: GameEvent;
-  senderId: string;
-  sessionId: string;
-  timestamp: number;
-  payload: any;
-}
-
-/**
- * Realtime connection manager options
- */
-export interface RealtimeManagerOptions {
-  autoReconnect: boolean;
-  reconnectInterval: number;
-  maxReconnectAttempts: number;
-  presenceEnabled: boolean;
-}
-
-/**
- * Listener function type
- */
-export type EventListener = (message: GameMessage) => void;
-
-/**
- * Default options
- */
-const defaultOptions: RealtimeManagerOptions = {
-  autoReconnect: true,
-  reconnectInterval: 5000,
-  maxReconnectAttempts: 10,
-  presenceEnabled: true,
-};
-
-/**
- * Class for managing realtime WebSocket connections for games
- */
 export class RealtimeManager {
-  private supabase: SupabaseClient;
-  private channel: RealtimeChannel | null = null;
-  private eventListeners: Map<GameEvent, Set<EventListener>> = new Map();
-  private options: RealtimeManagerOptions;
-  private reconnectAttempts = 0;
-  private reconnectTimer: NodeJS.Timeout | null = null;
-  private isConnected = false;
-  private userId: string | null = null;
-  private sessionId: string | null = null;
-
-  constructor(options: Partial<RealtimeManagerOptions> = {}) {
-    this.options = { ...defaultOptions, ...options };
-    this.supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+  private sync: GameSync;
+  private conflictResolver: ConflictResolver;
+  private stateManager: StateManager;
+  private connectionManager: ConnectionManager;
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 5;
+  private reconnectDelay: number = 1000;
+  private syncInterval: number = 10000;
+  private syncIntervalId: NodeJS.Timeout | null = null;
+  
+  constructor(
+    private supabase: SupabaseClient,
+    private sessionId: string,
+    private userId: string
+  ) {
+    this.sync = new GameSync(supabase, sessionId);
+    this.conflictResolver = new ConflictResolver();
+    this.stateManager = new StateManager();
+    this.connectionManager = new ConnectionManager(supabase);
   }
-
-  /**
-   * Set the current user ID
-   */
-  setUserId(userId: string): void {
-    this.userId = userId;
-  }
-
-  /**
-   * Initialize a connection for a game session
-   */
-  async connect(sessionId: string): Promise<boolean> {
+  
+  async initialize() {
     try {
-      if (this.channel) {
-        await this.disconnect();
-      }
-
-      this.sessionId = sessionId;
-      this.channel = this.supabase.channel(`game:${sessionId}`, {
-        config: {
-          presence: {
-            key: this.userId ?? undefined,
-          },
-        },
-      });
-
-      // Set up presence tracking
-      if (this.options.presenceEnabled && this.userId) {
-        this.channel.on('presence', { event: 'sync' }, () => {
-          const state = this.channel?.presenceState() || {};
-          // Handle presence sync
-          console.log('Presence synced', state);
-        });
-
-        this.channel.on('presence', { event: 'join' }, ({ key, newPresences }) => {
-          // Handle player join
-          console.log('Player joined', key, newPresences);
-        });
-
-        this.channel.on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-          // Handle player leave
-          console.log('Player left', key, leftPresences);
-        });
-
-        // Track user presence
-        await this.channel.track({
-          user_id: this.userId,
-          online_at: new Date().toISOString(),
-        });
-      }
-
-      // Listen for broadcast messages
-      this.channel.on('broadcast', { event: '*' }, (payload) => {
-        const message = payload.payload as GameMessage;
-        const listeners = this.eventListeners.get(message.eventType);
-        
-        if (listeners) {
-          listeners.forEach(listener => listener(message));
-        }
-      });
-
-      // Subscribe to the channel
-      const status = await this.channel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          this.isConnected = true;
-          this.reconnectAttempts = 0;
-          console.log(`Connected to game:${sessionId}`);
-        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          this.isConnected = false;
-          console.error(`Connection to game:${sessionId} closed or errored`);
-          this.handleDisconnect();
-        }
-      });
-
-      return this.isConnected;
+      // Set up connection with retry logic
+      await this.connectionManager.connect(this.sessionId);
+      
+      // Subscribe to game state changes
+      this.subscribeToGameState();
+      
+      // Set up periodic sync
+      this.setupPeriodicSync();
+      
+      // Set up conflict resolution
+      this.setupConflictResolution();
+      
+      // Set up connection monitoring
+      this.setupConnectionMonitoring();
+      
+      // Reset reconnect attempts on successful connection
+      this.reconnectAttempts = 0;
     } catch (error) {
-      console.error('Error connecting to realtime channel:', error);
-      this.handleDisconnect();
-      return false;
+      console.error('Failed to initialize real-time manager:', error);
+      await this.handleConnectionError(error);
     }
   }
-
-  /**
-   * Disconnect from the current channel
-   */
-  async disconnect(): Promise<void> {
-    if (this.channel) {
-      await this.channel.unsubscribe();
-      this.channel = null;
-    }
-    
-    this.isConnected = false;
-    this.sessionId = null;
-    
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-  }
-
-  /**
-   * Handle disconnection and potential reconnection
-   */
-  private handleDisconnect(): void {
-    if (!this.options.autoReconnect || !this.sessionId) {
-      return;
-    }
-
-    if (this.reconnectAttempts < this.options.maxReconnectAttempts) {
-      this.reconnectAttempts += 1;
-      
-      if (this.reconnectTimer) {
-        clearTimeout(this.reconnectTimer);
-      }
-      
-      this.reconnectTimer = setTimeout(async () => {
-        console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.options.maxReconnectAttempts})...`);
-        await this.connect(this.sessionId!);
-      }, this.options.reconnectInterval);
-    } else {
-      console.error(`Max reconnect attempts (${this.options.maxReconnectAttempts}) reached.`);
-    }
-  }
-
-  /**
-   * Send a message to the channel
-   */
-  sendMessage(eventType: GameEvent, payload: any): Promise<boolean> {
-    if (!this.channel || !this.isConnected || !this.sessionId || !this.userId) {
-      console.error('Cannot send message: not connected or missing user/session ID');
-      return Promise.resolve(false);
-    }
-
-    const message: GameMessage = {
-      eventType,
-      senderId: this.userId,
-      sessionId: this.sessionId,
-      timestamp: Date.now(),
-      payload,
-    };
-
-    return this.channel.send({
-      type: 'broadcast',
-      event: eventType,
-      payload: message,
-    }).then(() => true)
-      .catch(error => {
-        console.error('Error sending message:', error);
-        return false;
+  
+  private subscribeToGameState() {
+    this.supabase
+      .channel(`game:${this.sessionId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'game_states',
+        filter: `session_id=eq.${this.sessionId}`
+      }, (payload) => {
+        this.handleStateChange(payload);
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Successfully subscribed to game state changes');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Failed to subscribe to game state changes');
+        }
       });
   }
-
-  /**
-   * Add an event listener
-   */
-  addEventListener(eventType: GameEvent, listener: EventListener): void {
-    if (!this.eventListeners.has(eventType)) {
-      this.eventListeners.set(eventType, new Set());
+  
+  private async handleStateChange(payload: any) {
+    try {
+      // Get current local state
+      const localState = this.stateManager.getCurrentState();
+      if (!localState) {
+        console.warn('No local state available, using remote state');
+        this.stateManager.updateState(payload.new);
+        this.notifyStateChange(payload.new);
+        return;
+      }
+      
+      // Resolve conflicts if any
+      const resolvedState = await this.conflictResolver.resolve(
+        localState,
+        payload.new
+      );
+      
+      // Update local state
+      this.stateManager.updateState(resolvedState);
+      
+      // Trigger UI update
+      this.notifyStateChange(resolvedState);
+    } catch (error) {
+      console.error('Error handling state change:', error);
+      // Notify error to UI
+      this.notifyError(error);
     }
-    this.eventListeners.get(eventType)!.add(listener);
   }
-
-  /**
-   * Remove an event listener
-   */
-  removeEventListener(eventType: GameEvent, listener: EventListener): void {
-    if (this.eventListeners.has(eventType)) {
-      this.eventListeners.get(eventType)!.delete(listener);
+  
+  private setupPeriodicSync() {
+    // Clear any existing interval
+    if (this.syncIntervalId) {
+      clearInterval(this.syncIntervalId);
+    }
+    
+    // Set up new interval
+    this.syncIntervalId = setInterval(() => {
+      const currentState = this.stateManager.getCurrentState();
+      if (currentState) {
+        // Convert to app state before sending to sync
+        const appState = GameStateAdapter.toAppState(currentState);
+        this.sync.sendFullSync(appState);
+      }
+    }, this.syncInterval);
+  }
+  
+  private setupConflictResolution() {
+    this.conflictResolver.onConflict((local: RealtimeGameState, remote: RealtimeGameState) => {
+      return this.resolveConflict(local, remote);
+    });
+  }
+  
+  private setupConnectionMonitoring() {
+    this.connectionManager.onDisconnect(() => {
+      this.handleDisconnect();
+    });
+    
+    this.connectionManager.onReconnect(() => {
+      this.handleReconnect();
+    });
+  }
+  
+  private async handleConnectionError(error: any) {
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.reconnectAttempts++;
+      const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+      
+      console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+      
+      setTimeout(() => {
+        this.initialize();
+      }, delay);
+    } else {
+      console.error('Max reconnection attempts reached');
+      this.notifyError(new Error('Failed to establish connection after multiple attempts'));
     }
   }
-
-  /**
-   * Get the connection status
-   */
-  isConnectionActive(): boolean {
-    return this.isConnected;
+  
+  private handleDisconnect() {
+    console.log('Connection lost, attempting to reconnect...');
+    this.handleConnectionError(new Error('Connection lost'));
+  }
+  
+  private handleReconnect() {
+    console.log('Connection restored');
+    this.reconnectAttempts = 0;
+    // Resubscribe to game state changes
+    this.subscribeToGameState();
+    // Send full sync to ensure state consistency
+    const currentState = this.stateManager.getCurrentState();
+    if (currentState) {
+      // Convert to app state before sending to sync
+      const appState = GameStateAdapter.toAppState(currentState);
+      this.sync.sendFullSync(appState);
+    }
+  }
+  
+  private async resolveConflict(local: RealtimeGameState, remote: RealtimeGameState): Promise<RealtimeGameState> {
+    // Convert to app state for comparison
+    const localAppState = GameStateAdapter.toAppState(local);
+    const remoteAppState = GameStateAdapter.toAppState(remote);
+    
+    // Compare timestamps
+    const localTimestamp = localAppState.core.lastActionTimestamp || 0;
+    const remoteTimestamp = remoteAppState.core.lastActionTimestamp || 0;
+    
+    if (localTimestamp > remoteTimestamp) {
+      return local;
+    }
+    
+    // If timestamps are equal, use more sophisticated resolution
+    if (localTimestamp === remoteTimestamp) {
+      // Compare specific fields that are more likely to be correct
+      const localScore = this.calculateStateScore(localAppState);
+      const remoteScore = this.calculateStateScore(remoteAppState);
+      
+      return localScore >= remoteScore ? local : remote;
+    }
+    
+    return remote;
+  }
+  
+  private calculateStateScore(state: AppGameState): number {
+    // Implement a scoring system for state validity
+    // For example, count completed actions, valid moves, etc.
+    let score = 0;
+    
+    // Add points for completed actions
+    score += Object.keys(state.entities.tricks).length * 10;
+    score += Object.keys(state.entities.bids).length * 5;
+    
+    // Add points for valid relationships
+    if (state.relationships.currentTrick) score += 5;
+    if (state.relationships.currentPlayer) score += 5;
+    
+    // Add points for game progress
+    score += state.core.lastActionTimestamp ? 2 : 0;
+    
+    return score;
+  }
+  
+  private notifyStateChange(state: RealtimeGameState) {
+    // Notify all subscribers of state change
+    this.stateManager.notifySubscribers(state);
+  }
+  
+  private notifyError(error: any) {
+    // Notify error to UI
+    this.stateManager.notifyError(error);
+  }
+  
+  async cleanup() {
+    // Clear sync interval
+    if (this.syncIntervalId) {
+      clearInterval(this.syncIntervalId);
+      this.syncIntervalId = null;
+    }
+    
+    // Disconnect from real-time
+    await this.connectionManager.disconnect();
+    
+    // Stop sync
+    this.sync.stop();
+    
+    // Clean up state manager
+    this.stateManager.cleanup();
   }
 
-  /**
-   * Get the current session ID
-   */
-  getSessionId(): string | null {
-    return this.sessionId;
+  // Public methods for event handling
+  onStateChange(handler: StateChangeHandler) {
+    this.stateManager.subscribe(handler);
+  }
+
+  onError(handler: ErrorHandler) {
+    this.stateManager.onError(handler);
+  }
+
+  onDisconnect(handler: ConnectionHandler) {
+    this.connectionManager.onDisconnect(handler);
+  }
+
+  onReconnect(handler: ConnectionHandler) {
+    this.connectionManager.onReconnect(handler);
+  }
+
+  isConnected(): boolean {
+    return this.connectionManager.isConnectionActive();
+  }
+
+  updateState(state: RealtimeGameState) {
+    this.stateManager.updateState(state);
   }
 } 

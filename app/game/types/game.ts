@@ -165,13 +165,26 @@ export interface GameAnimations {
  * Game settings
  */
 export interface GameSettings {
+  maxPlayers: number;
+  minPlayers: number;
   maxRounds: number;
+  maxTricks: number;
   cardsPerPlayer: number;
+  roundTimeLimit: number;
+  trickTimeLimit: number;
+  timeLimit: number;
+  allowUndo: boolean;
+  allowRedo: boolean;
+  autoPlay: boolean;
+  soundEnabled: boolean;
+  animationsEnabled: boolean;
+  allowTrump: boolean;
+  allowNoTrump: boolean;
+  allowPartnership: boolean;
+  scoringSystem: string;
+  mode: 'standard' | 'trump' | 'no-trump' | 'partnership';
   allowJokers?: boolean;
   customDeckSize?: number;
-  timeLimit?: number; // in seconds
-  autoPlay?: boolean;
-  gameMode?: 'vs-computer' | 'local' | 'ranked'; // Type of game being played
   specialRules?: {
     [ruleName: string]: boolean;
   };

@@ -47,8 +47,8 @@ export default function GamePage() {
         }
 
         setGameData({
-          gameId: data.id,
-          ownerId: data.owner_id,
+          gameId: data.id as string,
+          ownerId: data.owner_id as string,
         });
       } catch (err: any) {
         console.error('Error fetching game:', err);

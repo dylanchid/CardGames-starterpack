@@ -7,13 +7,13 @@
 import React, { ReactNode } from 'react';
 import { Provider } from 'react-redux';
 import { store } from '../store/store';
-import { GameProvider } from './core/GameContext';
+import { GameProvider } from './core/GameProvider';
 import { BiddingProvider } from './features/bidding/BiddingProvider';
 import { CardPlayProvider } from './features/cardPlay/CardPlayProvider';
 import RealtimeProvider from './realtime/RealtimeProvider';
 import ErrorBoundary from './ErrorBoundary';
 import DndProvider from './DndProvider';
-import { GameProvider as GameBoardProvider } from './GameBoard/GameProvider';
+import { GameBoardProvider } from './GameBoard/GameBoardContext';
 
 /**
  * Props for GameRoot

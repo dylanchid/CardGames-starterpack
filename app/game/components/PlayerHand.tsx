@@ -5,13 +5,13 @@
 import { useGame } from './core/GameContext';
 import { useCardPlay } from './features/cardPlay/CardPlayProvider';
 import Card from './Card';
-import { Card as CardType } from '@/app/game/types/cards/CardTypes';
+import { CardType } from '../types/card';
 
 export default function PlayerHand() {
-  const { gameState } = useGame();
-  const { getValidCardsForPlayer, playCard } = useCardPlay();
+  const { gamePhase } = useGame();
+  const { getValidCardsToPlay, playCard } = useCardPlay();
   
-  const isCardPlayPhase = gameState.gamePhase === 'playing';
+  const isCardPlayPhase = gamePhase === 'playing';
   const currentPlayerId = 'current_player_id'; // This would come from authentication/session
   
   // Get the current player's hand from the players slice
@@ -19,13 +19,13 @@ export default function PlayerHand() {
   const playerHand: CardType[] = []; // This would come from your players state
   
   const validCards = isCardPlayPhase 
-    ? getValidCardsForPlayer(currentPlayerId)
+    ? getValidCardsToPlay(currentPlayerId)
     : playerHand;
 
   const handleCardClick = (card: CardType) => {
     if (!isCardPlayPhase) return;
     
-    const isValidCard = validCards.some(validCard => validCard.id === card.id);
+    const isValidCard = validCards.some((validCard: CardType) => validCard.id === card.id);
     if (!isValidCard) return;
     
     playCard(currentPlayerId, card);
@@ -46,7 +46,7 @@ export default function PlayerHand() {
       
       <div className="flex flex-wrap justify-center gap-2">
         {playerHand.map(card => {
-          const isValid = validCards.some(validCard => validCard.id === card.id);
+          const isValid = validCards.some((validCard: CardType) => validCard.id === card.id);
           const isDisabled = isCardPlayPhase && !isValid;
           
           return (

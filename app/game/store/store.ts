@@ -2,53 +2,33 @@
  * @fileoverview Redux store configuration
  */
 
-import { configureStore, ThunkAction, Action } from '@reduxjs/toolkit';
+import { configureStore } from '@reduxjs/toolkit';
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
+import gameReducer from './slices/game/gameSlice';
+import cardPlayReducer from './slices/cardPlay/cardPlaySlice';
+import biddingReducer from './slices/bidding/biddingSlice';
+import playerReducer from './slices/player/playerSlice';
+import { GameState } from '../types/core/GameTypes';
 
-// Import reducers
-import { 
-  gameReducer, 
-  playerReducer, 
-  biddingReducer, 
-  cardPlayReducer,
-  cardReducer,
-  uiReducer
-} from './slices';
-
-// Configure the store
 export const store = configureStore({
   reducer: {
     game: gameReducer,
-    player: playerReducer,
-    bidding: biddingReducer,
     cardPlay: cardPlayReducer,
-    card: cardReducer,
-    ui: uiReducer,
+    bidding: biddingReducer,
+    player: playerReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
-        // Ignore these paths in the state
-        ignoredActions: ['payload.error', 'meta.arg'],
-        ignoredActionPaths: ['payload.error', 'meta.arg'],
-        ignoredPaths: ['game.error.details'],
+        // Ignore these action types
+        ignoredActions: ['game/setAnimationState'],
       },
     }),
-  devTools: process.env.NODE_ENV !== 'production',
 });
 
-// Export types
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
 
-// Type-safe hooks
+// Use throughout your app instead of plain `useDispatch` and `useSelector`
 export const useAppDispatch = () => useDispatch<AppDispatch>();
-export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
-
-// Typed thunk
-export type AppThunk<ReturnType = void> = ThunkAction<
-  ReturnType,
-  RootState,
-  unknown,
-  Action<string>
->; 
+export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector; 

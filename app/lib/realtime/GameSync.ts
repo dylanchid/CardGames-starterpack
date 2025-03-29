@@ -1,262 +1,155 @@
 /**
- * @fileoverview Game synchronization service
+ * @fileoverview Game state synchronization manager
  */
 
-import { RealtimeManager, GameEvent } from './RealtimeManager';
-import { AppDispatch, RootState } from '@/app/game/store/store';
-import { 
-  setGamePhase, 
-  setRoundNumber, 
-  setTricksPlayed, 
-  setCurrentPlayerIndex,
-  setError,
-  setCurrentTrickLeader
-} from '@/app/game/store/slices/game/gameSlice';
-import { batchUpdatePlayers } from '@/app/game/store/slices/player/playerSlice';
-import { playCard } from '@/app/game/store/slices/cardPlay/cardPlaySlice';
-import { placeBid, revealBid } from '@/app/game/store/slices/bidding/biddingSlice';
-import { CardType } from '@/app/game/types/card';
-import { Player } from '@/app/game/types/core/PlayerTypes';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { GameState } from '../../types/core/GameTypes';
 
-/**
- * Game sync operation types
- */
-export type SyncOperation = 
-  | 'full_sync'
-  | 'phase_change'
-  | 'player_update'
-  | 'card_play'
-  | 'bid_place'
-  | 'bid_reveal'
-  | 'round_update'
-  | 'trick_update';
-
-/**
- * Game sync message payload
- */
-export interface GameSyncPayload {
-  operation: SyncOperation;
-  data: any;
-  timestamp: number;
-}
-
-/**
- * Full sync payload
- */
-interface FullSyncPayload {
-  gamePhase: string;
-  roundNumber: number;
-  tricksPlayed: number;
-  currentPlayerIndex: number;
-  currentTrickLeader: number;
-  players: { [key: string]: Player };
-}
-
-/**
- * Game sync service
- */
 export class GameSync {
-  private realtimeManager: RealtimeManager;
-  private dispatch: AppDispatch;
-  private getState: () => RootState;
-  private sessionId: string | null = null;
-  private lastSyncTimestamp = 0;
-
-  constructor(realtimeManager: RealtimeManager, dispatch: AppDispatch, getState: () => RootState) {
-    this.realtimeManager = realtimeManager;
-    this.dispatch = dispatch;
-    this.getState = getState;
+  private isSyncing: boolean = false;
+  private lastSyncTimestamp: number = 0;
+  private syncQueue: GameState[] = [];
+  private syncInterval: number = 1000; // Minimum time between syncs
+  
+  constructor(
+    private supabase: SupabaseClient,
+    private sessionId: string
+  ) {}
+  
+  async sendFullSync(state: GameState) {
+    if (this.isSyncing) {
+      // Queue the sync if we're already syncing
+      this.syncQueue.push(state);
+      return;
+    }
     
-    // Set up event listeners
-    this.setupEventListeners();
-  }
-
-  /**
-   * Set the game session ID
-   */
-  setSessionId(sessionId: string): void {
-    this.sessionId = sessionId;
-  }
-
-  /**
-   * Set up event listeners for game events
-   */
-  private setupEventListeners(): void {
-    // Listen for state sync events
-    this.realtimeManager.addEventListener('state_sync', (message) => {
-      const payload = message.payload as GameSyncPayload;
+    const now = Date.now();
+    if (now - this.lastSyncTimestamp < this.syncInterval) {
+      // Queue the sync if we're syncing too frequently
+      this.syncQueue.push(state);
+      return;
+    }
+    
+    try {
+      this.isSyncing = true;
       
-      // Only process messages newer than the last sync
-      if (payload.timestamp <= this.lastSyncTimestamp) {
-        return;
+      // Update the last sync timestamp
+      this.lastSyncTimestamp = now;
+      
+      // Prepare the sync payload
+      const syncPayload = {
+        session_id: this.sessionId,
+        state: state,
+        timestamp: now,
+        version: this.calculateStateVersion(state),
+      };
+      
+      // Send the sync to the server
+      const { error } = await this.supabase
+        .from('game_states')
+        .upsert(syncPayload, {
+          onConflict: 'session_id',
+        });
+      
+      if (error) {
+        throw error;
       }
       
-      this.lastSyncTimestamp = payload.timestamp;
-      this.handleSyncOperation(payload);
-    });
-    
-    // Listen for card play events
-    this.realtimeManager.addEventListener('card_play', (message) => {
-      const { playerId, card } = message.payload;
-      this.dispatch(playCard({ playerId, card }));
-    });
-    
-    // Listen for bid events
-    this.realtimeManager.addEventListener('bid_made', (message) => {
-      const { playerId, bidCards } = message.payload;
-      this.dispatch(placeBid({ playerId, bidCards }));
-    });
-    
-    // Listen for bid reveal events
-    this.realtimeManager.addEventListener('trick_complete', (message) => {
-      // Update game state based on completed trick
-      // This would typically update scores, determine winner, etc.
-    });
-  }
-
-  /**
-   * Handle a sync operation
-   */
-  private handleSyncOperation(payload: GameSyncPayload): void {
-    const { operation, data } = payload;
-    
-    switch (operation) {
-      case 'full_sync':
-        this.handleFullSync(data);
-        break;
-      case 'phase_change':
-        this.dispatch(setGamePhase(data.phase));
-        break;
-      case 'player_update':
-        this.dispatch(batchUpdatePlayers({ updates: data.updates }));
-        break;
-      case 'card_play':
-        this.dispatch(playCard(data));
-        break;
-      case 'bid_place':
-        this.dispatch(placeBid(data));
-        break;
-      case 'bid_reveal':
-        this.dispatch(revealBid(data));
-        break;
-      case 'round_update':
-        this.dispatch(setRoundNumber(data.roundNumber));
-        if (data.tricksPlayed !== undefined) {
-          this.dispatch(setTricksPlayed(data.tricksPlayed));
-        }
-        break;
-      case 'trick_update':
-        if (data.currentPlayerIndex !== undefined) {
-          this.dispatch(setCurrentPlayerIndex(data.currentPlayerIndex));
-        }
-        if (data.currentTrickLeader !== undefined) {
-          this.dispatch(setCurrentTrickLeader(data.currentTrickLeader));
-        }
-        break;
-      default:
-        console.warn(`Unknown sync operation: ${operation}`);
+      // Process any queued syncs
+      await this.processSyncQueue();
+    } catch (error) {
+      console.error('Error during full sync:', error);
+      // Requeue the failed sync
+      this.syncQueue.push(state);
+    } finally {
+      this.isSyncing = false;
     }
   }
-
-  /**
-   * Handle a full sync operation
-   */
-  private handleFullSync(data: FullSyncPayload): void {
-    const { 
-      gamePhase, 
-      roundNumber, 
-      tricksPlayed, 
-      currentPlayerIndex, 
-      currentTrickLeader,
-      players 
-    } = data;
-    
-    // Update game state
-    this.dispatch(setGamePhase(gamePhase as any));
-    this.dispatch(setRoundNumber(roundNumber));
-    this.dispatch(setTricksPlayed(tricksPlayed));
-    this.dispatch(setCurrentPlayerIndex(currentPlayerIndex));
-    this.dispatch(setCurrentTrickLeader(currentTrickLeader));
-    
-    // Update players
-    this.dispatch(batchUpdatePlayers({ updates: players }));
-  }
-
-  /**
-   * Send a full sync of the game state
-   */
-  sendFullSync(): Promise<boolean> {
-    if (!this.sessionId) {
-      console.error('Cannot send sync: no active session');
-      return Promise.resolve(false);
+  
+  async sendPartialSync(updates: Partial<GameState>) {
+    if (this.isSyncing) {
+      // Queue the partial sync
+      this.syncQueue.push(updates as GameState);
+      return;
     }
     
-    const state = this.getState();
-    const payload: GameSyncPayload = {
-      operation: 'full_sync',
-      data: {
-        gamePhase: state.game.gamePhase,
-        roundNumber: state.game.roundNumber,
-        tricksPlayed: state.game.tricksPlayed,
-        currentPlayerIndex: state.game.currentPlayerIndex,
-        currentTrickLeader: state.game.currentTrickLeader,
-        players: state.player.entities,
+    try {
+      this.isSyncing = true;
+      
+      // Get the current state from the server
+      const { data: currentState, error: fetchError } = await this.supabase
+        .from('game_states')
+        .select('state')
+        .eq('session_id', this.sessionId)
+        .single();
+      
+      if (fetchError) {
+        throw fetchError;
+      }
+      
+      // Merge the updates with the current state
+      const mergedState = this.mergeStates(currentState.state, updates);
+      
+      // Send the merged state
+      await this.sendFullSync(mergedState);
+      
+      // Process any queued syncs
+      await this.processSyncQueue();
+    } catch (error) {
+      console.error('Error during partial sync:', error);
+      // Requeue the failed sync
+      this.syncQueue.push(updates as GameState);
+    } finally {
+      this.isSyncing = false;
+    }
+  }
+  
+  private async processSyncQueue() {
+    while (this.syncQueue.length > 0) {
+      const nextSync = this.syncQueue.shift();
+      if (!nextSync) break;
+      
+      await this.sendFullSync(nextSync);
+    }
+  }
+  
+  private mergeStates(current: GameState, updates: Partial<GameState>): GameState {
+    // Deep merge the updates with the current state
+    return {
+      ...current,
+      ...updates,
+      entities: {
+        ...current.entities,
+        ...updates.entities,
       },
-      timestamp: Date.now(),
+      relationships: {
+        ...current.relationships,
+        ...updates.relationships,
+      },
+      ui: {
+        ...current.ui,
+        ...updates.ui,
+      },
     };
-    
-    return this.realtimeManager.sendMessage('state_sync', payload);
   }
-
-  /**
-   * Send a card play event
-   */
-  sendCardPlay(playerId: string, card: CardType): Promise<boolean> {
-    const payload: GameSyncPayload = {
-      operation: 'card_play',
-      data: { playerId, card },
-      timestamp: Date.now(),
-    };
+  
+  private calculateStateVersion(state: GameState): number {
+    // Calculate a version number based on the state's content
+    // This can be used for conflict resolution
+    let version = 0;
     
-    return this.realtimeManager.sendMessage('card_play', payload);
+    // Add version components based on state changes
+    version += Object.keys(state.entities.tricks).length * 1000;
+    version += Object.keys(state.entities.bids).length * 100;
+    version += (state.core.lastActionTimestamp || 0) * 10;
+    version += state.relationships.playerOrder.length;
+    
+    return version;
   }
-
-  /**
-   * Send a bid event
-   */
-  sendBid(playerId: string, bidCards: CardType[]): Promise<boolean> {
-    const payload: GameSyncPayload = {
-      operation: 'bid_place',
-      data: { playerId, bidCards },
-      timestamp: Date.now(),
-    };
-    
-    return this.realtimeManager.sendMessage('bid_made', payload);
-  }
-
-  /**
-   * Send a phase change event
-   */
-  sendPhaseChange(phase: string): Promise<boolean> {
-    const payload: GameSyncPayload = {
-      operation: 'phase_change',
-      data: { phase },
-      timestamp: Date.now(),
-    };
-    
-    return this.realtimeManager.sendMessage('state_sync', payload);
-  }
-
-  /**
-   * Send a player update event
-   */
-  sendPlayerUpdate(updates: { [key: string]: Partial<Player> }): Promise<boolean> {
-    const payload: GameSyncPayload = {
-      operation: 'player_update',
-      data: { updates },
-      timestamp: Date.now(),
-    };
-    
-    return this.realtimeManager.sendMessage('state_sync', payload);
+  
+  stop() {
+    // Clear the sync queue
+    this.syncQueue = [];
+    this.isSyncing = false;
   }
 } 

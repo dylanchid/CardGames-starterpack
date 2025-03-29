@@ -69,7 +69,6 @@ export function BiddingProvider({ children }: BiddingProviderProps) {
   
   // Selectors
   const biddingState = useAppSelector(selectBiddingState);
-  const bids = useAppSelector(selectBids);
   const currentBidder = useAppSelector(selectCurrentBidder);
   const bidPhaseComplete = useAppSelector(selectBidPhaseComplete);
   const revealPhaseActive = useAppSelector(selectRevealPhaseActive);
@@ -97,7 +96,7 @@ export function BiddingProvider({ children }: BiddingProviderProps) {
   
   // Bidding queries
   const getBidForPlayer = (playerId: string) => {
-    const bid = bids[playerId];
+    const bid = biddingState.bids[playerId];
     if (!bid) return null;
     
     return {
@@ -131,7 +130,7 @@ export function BiddingProvider({ children }: BiddingProviderProps) {
     allPlayersHaveBid,
     playerBidStatus,
     allBidsRevealed,
-    bids,
+    biddingState.bids,
   ]);
   
   return (

@@ -8,10 +8,10 @@ import { RootState } from '../../store';
 // Basic selectors
 export const selectBiddingState = (state: RootState) => state.bidding;
 export const selectBids = (state: RootState) => state.bidding.bids;
-export const selectBidOrder = (state: RootState) => state.bidding.bidOrder;
+export const selectBidOrder = (state: RootState) => state.bidding.playerOrder.ids;
 export const selectCurrentBidder = (state: RootState) => state.bidding.currentBidder;
 export const selectBidPhaseComplete = (state: RootState) => state.bidding.bidPhaseComplete;
-export const selectBidRevealOrder = (state: RootState) => state.bidding.bidRevealOrder;
+export const selectBidRevealOrder = (state: RootState) => state.bidding.playerOrder.ids;
 export const selectRevealPhaseActive = (state: RootState) => state.bidding.revealPhaseActive;
 
 // Parameterized selectors

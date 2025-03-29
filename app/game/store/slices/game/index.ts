@@ -3,23 +3,29 @@
  */
 
 import gameReducer, {
-  setGamePhase,
-  setGameMode,
-  updateGameSettings,
-  setTurnupCard,
-  setCurrentPlayerIndex,
-  setCurrentTrickLeader,
-  setRoundNumber, 
-  setTricksPlayed,
-  setGameStarted,
+  setPhase,
+  updateSettings,
   setError,
-  setLoading,
-  setLastAction,
+  addPlayer,
+  updatePlayer,
+  removePlayer,
+  addTrick,
+  updateTrick,
+  addBid,
+  updateBid,
+  setCurrentTrick,
+  setCurrentPlayer,
+  setCurrentBidder,
+  setSelectedCards,
+  setDraggedCard,
+  setAnimationState,
+  resetGame,
   addTrickToHistory,
   clearTrickHistory,
-  startNewRound,
   finishGame,
-  resetGame
+  setTurnupCard,
+  startNewRound,
+  updateGameSettings
 } from './gameSlice';
 
 import type { 
@@ -32,60 +38,90 @@ import type {
 import {
   selectGameState,
   selectGamePhase,
-  selectCurrentPlayerIndex,
-  selectGameLoading,
-  selectGameError,
-  selectTurnupCardId,
-  selectRoundNumber,
-  selectTricksPlayed,
-  selectTrickHistory,
-  selectGameStarted,
-  selectGameMode,
   selectGameSettings,
+  selectGameError,
+  selectLastAction,
+  selectLastActionTimestamp,
+  selectPlayerById,
+  selectTrickById,
+  selectBidById,
+  selectCurrentTrickData,
+  selectCurrentPlayerData,
+  selectCurrentBidderData,
+  selectPlayerOrderData,
+  selectIsPlayerTurn,
+  selectIsPlayerBidding,
+  selectIsCardSelected,
+  selectIsCardDragged,
+  selectIsAnimating,
+  selectSelectedCards,
+  selectDraggedCard,
+  selectAnimationState,
+  selectCurrentPlayerIndex,
   selectCurrentTrickLeader,
-  selectLastAction
+  selectTrickHistory,
+  selectRoundNumber,
+  selectTricksPlayed
 } from './gameSelectors';
 
 // Export the reducer as default
 export { gameReducer as default };
 
-// Re-export all action creators
+// Export actions
 export {
-  setGamePhase,
-  setGameMode,
-  updateGameSettings,
-  setTurnupCard,
-  setCurrentPlayerIndex,
-  setCurrentTrickLeader,
-  setRoundNumber, 
-  setTricksPlayed,
-  setGameStarted,
+  setPhase,
+  updateSettings,
   setError,
-  setLoading,
-  setLastAction,
+  addPlayer,
+  updatePlayer,
+  removePlayer,
+  addTrick,
+  updateTrick,
+  addBid,
+  updateBid,
+  setCurrentTrick,
+  setCurrentPlayer,
+  setCurrentBidder,
+  setSelectedCards,
+  setDraggedCard,
+  setAnimationState,
+  resetGame,
   addTrickToHistory,
   clearTrickHistory,
-  startNewRound,
   finishGame,
-  resetGame
+  setTurnupCard,
+  startNewRound,
+  updateGameSettings
 };
 
-// Re-export all selectors
+// Export selectors
 export {
   selectGameState,
   selectGamePhase,
-  selectCurrentPlayerIndex,
-  selectGameLoading,
-  selectGameError,
-  selectTurnupCardId,
-  selectRoundNumber,
-  selectTricksPlayed,
-  selectTrickHistory,
-  selectGameStarted,
-  selectGameMode,
   selectGameSettings,
+  selectGameError,
+  selectLastAction,
+  selectLastActionTimestamp,
+  selectPlayerById,
+  selectTrickById,
+  selectBidById,
+  selectCurrentTrickData,
+  selectCurrentPlayerData,
+  selectCurrentBidderData,
+  selectPlayerOrderData,
+  selectIsPlayerTurn,
+  selectIsPlayerBidding,
+  selectIsCardSelected,
+  selectIsCardDragged,
+  selectIsAnimating,
+  selectSelectedCards,
+  selectDraggedCard,
+  selectAnimationState,
+  selectCurrentPlayerIndex,
   selectCurrentTrickLeader,
-  selectLastAction
+  selectTrickHistory,
+  selectRoundNumber,
+  selectTricksPlayed
 };
 
 // Types

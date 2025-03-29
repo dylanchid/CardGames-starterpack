@@ -103,6 +103,7 @@ export const PositionSchema = z
     x: z.number().min(0),
     y: z.number().min(0),
     zIndex: z.number().min(0),
+    rotation: z.number().optional(),
   })
   .transform(pos => ({
     ...pos,
@@ -115,6 +116,7 @@ export interface Position {
   x: number;
   y: number;
   zIndex: number;
+  rotation?: number;
   centerX?: number;
   centerY?: number;
   distanceFromOrigin?: number;
